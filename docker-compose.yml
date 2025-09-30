@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: bookclub
+      POSTGRES_PASSWORD: bookclubpass
+      POSTGRES_DB: bookclub
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    restart: always
+    environment:
+      DATABASE_URL: postgres://bookclub:bookclubpass@db:5432/bookclub
+      PORT: 4000
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+    command: sh -c "npx prisma db push --schema=src/prisma/schema.prisma && npx prisma db seed --schema=src/prisma/schema.prisma && node dist/index.js"
+
+  frontend:
+    build: ./frontend
+    restart: always
+    environment:
+      VITE_API_BASE: http://backend:4000
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
