@@ -1,111 +1,103 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../api';
-import { toast } from 'react-toastify';
-
-type Book = { id:number; title:string; author_id:number; description?:string; publishedYear?:number; author_name?:string };
-type Author = { id:number; name:string };
+import React from 'react';
+import CreateModal from '../components/CreateModal';
+import EditModal from '../components/EditModal';
+import DeleteModal from '../components/DeleteModal';
+import ListItem from '../components/ListItem';
+import BookContent from '../components/BookContent';
+import BookForm from '../components/BookForm';
+import BookSkeleton from '../components/BookSkeleton';
+import { useBooks } from '../hooks/useBooks';
 
 export default function BooksPanel(){
-  const [books, setBooks] = useState<Book[]>([]);
-  const [authors, setAuthors] = useState<Author[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title:'', author_id:'', description:'', publishedYear:'' });
-  const [editing, setEditing] = useState<Book | null>(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [b,a] = await Promise.all([api('/books'), api('/authors')]);
-      setBooks(b);
-      setAuthors(a);
-    } catch (e) {
-      toast.error('Failed to load books');
-    } finally { setLoading(false); }
-  };
-
-  useEffect(()=>{ load(); }, []);
-
-  const submit = async (e:React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editing) {
-        await api(`/books/${editing.id}`, { method:'PUT', body: JSON.stringify({
-          title: form.title,
-          author_id: Number(form.author_id),
-          description: form.description || null,
-          published_year: form.publishedYear ? Number(form.publishedYear) : null
-        })});
-        toast.success('Book updated');
-        setEditing(null);
-      } else {
-        await api('/books', { method:'POST', body: JSON.stringify({
-          title: form.title,
-          author_id: Number(form.author_id),
-          description: form.description || null,
-          published_year: form.publishedYear ? Number(form.publishedYear) : null
-        })});
-        toast.success('Book created');
-      }
-      setForm({ title:'', author_id:'', description:'', publishedYear:'' });
-      load();
-    } catch (e) {
-      toast.error('Failed to save book');
-    }
-  };
-
-  const remove = async (id:number) => {
-    if (!confirm('Delete this book?')) return;
-    try {
-      await api(`/books/${id}`, { method:'DELETE' });
-      toast.success('Deleted');
-      load();
-    } catch (e) {
-      toast.error('Failed to delete');
-    }
-  };
-
-  const startEdit = (b:Book) => {
-    setEditing(b);
-    setForm({ title: b.title, author_id: String(b.author_id), description: b.description || '', publishedYear: b.publishedYear ? String(b.publishedYear) : '' });
-  };
-
+  const {
+    books,
+    authors,
+    loading,
+    form,
+    editing,
+    deleteId,
+    isCreating,
+    submit,
+    remove,
+    startEdit,
+    startCreate,
+    cancelCreate,
+    cancelEdit,
+    updateForm,
+    setDeleteId
+  } = useBooks();
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-2">Books</h2>
-      <form onSubmit={submit} className="mb-4">
-        <input required value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Title" className="border p-2 rounded w-full mb-2"/>
-        <select required value={form.author_id} onChange={e=>setForm({...form,author_id:e.target.value})} className="border p-2 rounded w-full mb-2">
-          <option value="">Choose author</option>
-          {authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
-        <input value={form.publishedYear} onChange={e=>setForm({...form,publishedYear:e.target.value})} placeholder="Published year" className="border p-2 rounded w-full mb-2"/>
-        <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Description" className="border p-2 rounded w-full mb-2"></textarea>
-        <div className="flex gap-2">
-          <button className="px-3 py-1 bg-green-600 text-white rounded">{editing? 'Update':'Create'}</button>
-          {editing && <button type="button" onClick={()=>{ setEditing(null); setForm({ title:'', author_id:'', description:'', publishedYear:'' }) }} className="px-3 py-1 border rounded">Cancel</button>}
-        </div>
-      </form>
+      <div className='flex justify-between items-center mb-4'>
+        <h2 className="text-xl font-semibold mb-2">Books</h2>
+        <button className="px-4 py-2 bg-[#00361A] text-white rounded-lg shadow-sm hover:shadow-md hover:bg-[#002c15] transition" onClick={startCreate}>
+          Create
+        </button>
+      </div>
+      {loading && <BookSkeleton count={5} />}
+      {!loading && books.length === 0 && <div className="text-gray-500">No books yet</div>}
+      {!loading && books.length > 0 && (
+        <ul className="space-y-2">
+          {books.map(book => (
+            <ListItem
+              key={book.id}
+              id={book.id}
+              onEdit={() => startEdit(book)}
+              onDelete={setDeleteId}
+              editLabel={`Edit ${book.title}`}
+              deleteLabel={`Delete ${book.title}`}
+            >
+              <BookContent book={book} />
+            </ListItem>
+          ))}
+        </ul>
+      )}
 
-      {loading && <div>Loading...</div>}
-      {!loading && books.length===0 && <div className="text-gray-500">No books yet</div>}
+      <CreateModal
+        open={isCreating}
+        onClose={cancelCreate}
+        onSubmit={submit}
+        title="Create Book"
+      >
+        <BookForm
+          title={form.title}
+          authorId={form.authorId}
+          publishedYear={form.publishedYear}
+          description={form.description}
+          authors={authors}
+          onTitleChange={(title) => updateForm({title})}
+          onAuthorIdChange={(author_id) => updateForm({author_id})}
+          onPublishedYearChange={(publishedYear) => updateForm({publishedYear})}
+          onDescriptionChange={(description) => updateForm({description})}
+        />
+      </CreateModal>
 
-      <ul className="space-y-2">
-        {books.map(b => (
-          <li key={b.id} className="p-3 border rounded">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-medium">{b.title} <span className="text-sm text-gray-500">({b.publishedYear || '—'})</span></div>
-                <div className="text-sm text-gray-600">{b.author_name}</div>
-                <div className="text-sm mt-2">{b.description}</div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => startEdit(b)} className="text-sm px-2 py-1 border rounded">Edit</button>
-                <button onClick={() => remove(b.id)} className="text-sm px-2 py-1 border rounded text-red-600">Delete</button>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <EditModal
+        open={!!editing}
+        onClose={cancelEdit}
+        onSubmit={submit}
+        title="Edit Book"
+      >
+        <BookForm
+          title={form.title}
+          authorId={form.author_id || editing?.authorId}
+          publishedYear={form.publishedYear}
+          description={form.description}
+          authors={authors}
+          onTitleChange={(title) => updateForm({title})}
+          onAuthorIdChange={(author_id) => updateForm({author_id})}
+          onPublishedYearChange={(publishedYear) => updateForm({publishedYear})}
+          onDescriptionChange={(description) => updateForm({description})}
+        />
+      </EditModal>
+
+      <DeleteModal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => remove(deleteId)}
+        title="Delete Book"
+        itemName={books.find(b => b.id === deleteId)?.title}
+      />
     </div>
   );
 }

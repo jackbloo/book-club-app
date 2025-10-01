@@ -1,90 +1,95 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../api';
-import { toast } from 'react-toastify';
-
-type Author = { id:number; name:string; bio?:string };
+import React from 'react';
+import CreateModal from '../components/CreateModal';
+import EditModal from '../components/EditModal';
+import DeleteModal from '../components/DeleteModal';
+import ListItem from '../components/ListItem';
+import AuthorContent from '../components/AuthorContent';
+import AuthorForm from '../components/AuthorForm';
+import AuthorSkeleton from '../components/AuthorSkeleton';
+import { useAuthors } from '../hooks/useAuthors';
 
 export default function AuthorsPanel(){
-  const [authors, setAuthors] = useState<Author[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name:'', bio:'' });
-  const [editing, setEditing] = useState<Author| null>(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await api('/authors');
-      setAuthors(data);
-    } catch (e) {
-      toast.error('Failed to load authors');
-    } finally { setLoading(false); }
-  };
-
-  useEffect(()=>{ load(); }, []);
-
-  const submit = async (e:React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editing) {
-        await api(`/authors/${editing.id}`, { method:'PUT', body: JSON.stringify({ name: form.name, bio: form.bio || null }) });
-        toast.success('Author updated');
-        setEditing(null);
-      } else {
-        await api('/authors', { method:'POST', body: JSON.stringify({ name: form.name, bio: form.bio || null }) });
-        toast.success('Author created');
-      }
-      setForm({ name:'', bio:'' });
-      load();
-    } catch (e) {
-      toast.error('Failed to save author');
-    }
-  };
-
-  const remove = async (id:number) => {
-    if (!confirm('Delete this author?')) return;
-    try {
-      await api(`/authors/${id}`, { method:'DELETE' });
-      toast.success('Deleted');
-      load();
-    } catch (e) {
-      toast.error('Failed to delete');
-    }
-  };
-
-  const startEdit = (a:Author) => {
-    setEditing(a);
-    setForm({ name: a.name, bio: a.bio || '' });
-  };
+  const {
+    authors,
+    loading,
+    form,
+    editing,
+    deleteId,
+    isCreating,
+    submit,
+    remove,
+    startEdit,
+    startCreate,
+    cancelCreate,
+    cancelEdit,
+    updateForm,
+    setDeleteId
+  } = useAuthors();
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-2">Authors</h2>
-      <form onSubmit={submit} className="mb-4">
-        <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Name" className="border p-2 rounded w-full mb-2"/>
-        <textarea value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})} placeholder="Bio (optional)" className="border p-2 rounded w-full mb-2"></textarea>
-        <div className="flex gap-2">
-          <button className="px-3 py-1 bg-blue-600 text-white rounded">{editing? 'Update':'Create'}</button>
-          {editing && <button type="button" onClick={()=>{ setEditing(null); setForm({name:'',bio:''}) }} className="px-3 py-1 border rounded">Cancel</button>}
-        </div>
-      </form>
+      <div className='flex justify-between items-center mb-4'>
+          <h2 className="text-xl font-semibold mb-2">Authors</h2>
+          <button className="px-4 py-2 bg-[#234C6A] text-white rounded-lg shadow-sm hover:shadow-md hover:bg-[#1d3f58] transition" onClick={startCreate}>
+            Create
+          </button>
+      </div>
 
-      {loading && <div>Loading...</div>}
-      {!loading && authors.length===0 && <div className="text-gray-500">No authors yet</div>}
+      {loading && <AuthorSkeleton count={5} />}
+      {!loading && authors.length === 0 && <div className="text-gray-500">No authors yet</div>}
+      {!loading && authors.length > 0 && (
+        <ul className="space-y-2">
+          {authors.map(author =>(
+            <ListItem
+              key={author.id}
+              id={author.id}
+              onEdit={() => startEdit(author)}
+              onDelete={setDeleteId}
+              editLabel={`Edit ${author.name}`}
+              deleteLabel={`Delete ${author.name}`}
+            >
+              <AuthorContent author={author} />
+            </ListItem>
+          ))}
+        </ul>
+      )}
 
-      <ul className="space-y-2">
-        {authors.map(a=>(
-          <li key={a.id} className="p-3 border rounded flex justify-between items-start">
-            <div>
-              <div className="font-medium">{a.name}</div>
-              <div className="text-sm text-gray-600">{a.bio}</div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={()=>startEdit(a)} className="text-sm px-2 py-1 border rounded">Edit</button>
-              <button onClick={()=>remove(a.id)} className="text-sm px-2 py-1 border rounded text-red-600">Delete</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <CreateModal
+        open={isCreating}
+        onClose={cancelCreate}
+        onSubmit={submit}
+        title="Create Author"
+      >
+        <AuthorForm
+          name={form.name}
+          bio={form.bio}
+          onNameChange={(name) => updateForm({name})}
+          onBioChange={(bio) => updateForm({bio})}
+        />
+      </CreateModal>
+
+      <EditModal
+        open={!!editing}
+        onClose={cancelEdit}
+        onSubmit={submit}
+        title="Edit Author"
+      >
+        <AuthorForm
+          name={form.name}
+          bio={form.bio}
+          onNameChange={(name) => updateForm({name})}
+          onBioChange={(bio) => updateForm({bio})}
+        />
+      </EditModal>
+
+      <DeleteModal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => remove(deleteId)}
+        title="Delete Author"
+        itemName={authors.find(a => a.id === deleteId)?.name}
+      />
+
     </div>
   );
 }

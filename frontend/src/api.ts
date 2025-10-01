@@ -11,5 +11,6 @@ export async function api(path: string, opts: RequestInit = {}) {
     const err = await res.json().catch(() => ({}));
     throw { status: res.status, body: err };
   }
+  if(res.status === 204) return true;
   return res.json();
 }
